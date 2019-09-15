@@ -1,6 +1,8 @@
+use crate::utility::read_to_array;
 /// Load ines file into `ROM` struct.
 /// See: http://wiki.nesdev.com/w/index.php/INES
 use std::fmt;
+use std::io::{self, Read};
 
 pub struct NESHeader {
     /// "NES\x1a"
@@ -54,5 +56,49 @@ impl fmt::Display for NESHeader {
             self.chr_rom_size * 8,
             self.mapper_id()
         )
+    }
+}
+
+pub struct Rom {
+    pub header: NESHeader,
+    pub prg_rom: Vec<u8>,
+    pub chr_rom: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub enum LoadRomError {
+    /// Error in IO.
+    IOError(io::Error),
+    /// Error in iNES header
+    NESFormatError,
+}
+
+impl From<io::Error> for LoadRomError {
+    fn from(err: io::Error) -> Self {
+        LoadRomError::IOError(err)
+    }
+}
+
+impl Rom {
+    pub fn load(r: &mut dyn Read) -> Result<Rom, LoadRomError> {
+        let mut header_arr = [0u8; 16];
+        read_to_array(&mut header_arr, r)?;
+        let header = NESHeader::new(header_arr);
+
+        if header.magic != *b"NES\x1a" {
+            println!("Format ERROR!");
+            Err(LoadRomError::NESFormatError)
+        } else {
+            println!("Header info: {}", header);
+            let mut prg_rom = vec![0u8; header.prg_rom_size as usize * 16384];
+            let mut chr_rom = vec![0u8; header.chr_rom_size as usize * 8192];
+            read_to_array(&mut prg_rom, r)?;
+            read_to_array(&mut chr_rom, r)?;
+            Ok(Rom {
+                header: header,
+                prg_rom: prg_rom,
+                chr_rom: chr_rom,
+            })
+        }
     }
 }
